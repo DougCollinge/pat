@@ -44,7 +44,6 @@ func Connect(connectStr string) (success bool) {
 	if connectStr == "" {
 		return false
 	} else if aliased, ok := config.ConnectAliases[connectStr]; ok {
-		log.Printf("DJC aliased:%s", aliased)
 		return Connect(aliased)
 	}
 
@@ -53,8 +52,6 @@ func Connect(connectStr string) (success bool) {
 		log.Println(err)
 		return false
 	}
-	log.Printf("DJC Connect() connectStr:%s", connectStr)
-	log.Printf("DJC Connect() url:%s", url)
 
 	// Init TNCs
 	switch url.Scheme {
@@ -122,7 +119,6 @@ func Connect(connectStr string) (success bool) {
 
 	freq := url.Params.Get("freq")
 	rigmode := strings.ToUpper(url.Params.Get("rig_mode"))
-	log.Printf("DJC connect freq:%s, rigmode:%s", freq, rigmode)
 
 	if freq != "" {
 		revertVFOState, err = qsy(url.Scheme, freq, rigmode)
@@ -182,7 +178,6 @@ func Connect(connectStr string) (success bool) {
 }
 
 func qsy(method, addr string, rigmode string) (revert func(), err error) {
-	log.Printf("DJC qsy method:%v addr:%v rigmode:%v", method, addr, rigmode)
 	noop := func() {}
 	rig, rigName, ok, err := VFOForTransport(method)
 	if err != nil {
@@ -201,16 +196,12 @@ func qsy(method, addr string, rigmode string) (revert func(), err error) {
 	var oldbw int
 
 	if rigmode != "" { // If rigmode is to be set then we need to preserve and restore the old rigmode and bandwidth
-		log.Printf("DJC qsy - about to setRigMode %s %s", rigmode, "0")
 		oldrigmode, oldbw, err = setRigMode(rig, rigmode, 0) // For now, always take the default bandwidth for the given mode.
 		if err != nil {
-			log.Printf("DJC qsy - setRigMode() failed:%v", err)
 			return noop, err
 		}
 	} else { // rigmode was not specified, no need to preserve old rigmode - just keep whatever
-		log.Printf("DJC qsy - no rigmode set, none preserved.")
 	}
-	log.Printf("DJC qsy oldrigmode:%s oldbw:%d rigmode:%s", oldrigmode, oldbw, rigmode)
 
 	time.Sleep(3 * time.Second)
 

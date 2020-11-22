@@ -326,7 +326,6 @@ function updateConnectAliases() {
 			$('#aliasSelect option:selected').each(function() {
 				var alias = $(this).text();
 				var url = connectAliases[$(this).text()];
-				console.log("DJC updateConnectAliases aliasSelect url:"+url)
 				setConnectValues(url);
 				select.val('');
 				select.selectpicker('refresh');
@@ -355,10 +354,8 @@ function setConnectValues(url) {
 
 	if(url.hasQuery("rig_mode")) {
 		$('#rigModeInput').val(query["rig_mode"]);
-		console.log("DJC setConnectValues url has rig_mode:"+query["rig_mode"]);
 	}
 	else {
-		console.log("DJC setConnectValues url has no rig_mode. Freq:"+$('#freqInput').val());
 		$('#rigModeInput').val('');
 	}
 
@@ -405,13 +402,11 @@ function getConnectURL() {
 	if(params) {
 		url += params.replace("&", "?");
 	}
-alert("DJC getConnectURL() url:" + url);
 	return url;
 }
 
 function onConnectFreqChange() {
 	$('#qsyWarning').empty().attr('hidden', true);
-console.log("DJC onConnectFreqChange() ...")
 	const freqInput = $('#freqInput');
 	freqInput.css('text-decoration', 'none currentcolor solid');
 
@@ -425,7 +420,6 @@ console.log("DJC onConnectFreqChange() ...")
 	});
 	inputGroup.tooltip('destroy');
 
-	console.log("DJC onConnectFreqChange() rigModeInput val:"+rigModeInput.val())
 	const data = {
 		transport: $('#transportSelect').val(),
 		freq:      new Number(freqInput.val()),
@@ -667,7 +661,6 @@ function closeComposer(clear)
 function connect(evt)
 {
 	urlstr = getConnectURL()
-console.log("DJC connect() urlstr:" + ("/api/connect?url=" + encodeURIComponent(urlstr)));
 	$('#connectModal').modal('hide');
 
 	$.getJSON("/api/connect?url=" + encodeURIComponent(urlstr), function(data){

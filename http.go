@@ -405,8 +405,6 @@ func qsyHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Printf("DJC qsyHandler payload Transport:%s Freq:%s RigMode:%s", payload.Transport, payload.Freq, payload.RigMode)
-
 	rig, rigName, ok, err := VFOForTransport(payload.Transport)
 	switch {
 	case rigName == "":
@@ -425,8 +423,6 @@ func qsyHandler(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("QSY transport selection failed: %v", err)
 	default:
-		log.Printf("DJC qsyHandler payload.Freq:%v", payload.Freq)
-		log.Printf("DJC qsyHandler payload Transport:%s Freq:%s RigMode: %s", payload.Transport, payload.Freq, payload.RigMode)
 		if _, _, err := setFreq(rig, string(payload.Freq)); err != nil {
 			w.Header().Set("Problem-Type", "BADFREQ")
 			w.Header().Set("Problem-Text", "Frequency given is not valid")
@@ -500,7 +496,6 @@ func DisconnectHandler(w http.ResponseWriter, req *http.Request) {
 
 func ConnectHandler(w http.ResponseWriter, req *http.Request) {
 	connectStr := req.FormValue("url")
-	log.Printf("DJC ConnectHandler connectStr:%s", connectStr)
 	nMsgs := mbox.InboxCount()
 
 	if success := Connect(connectStr); !success {
