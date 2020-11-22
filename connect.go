@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/harenber/ptc-go/pactor/v2"
+	"github.com/la5nta/wl2k-go/rigcontrol/hamlib"
 	"github.com/la5nta/wl2k-go/transport"
 	"github.com/la5nta/wl2k-go/transport/ardop"
 	"github.com/la5nta/wl2k-go/transport/winmor"
@@ -43,6 +44,7 @@ func Connect(connectStr string) (success bool) {
 	if connectStr == "" {
 		return false
 	} else if aliased, ok := config.ConnectAliases[connectStr]; ok {
+		log.Printf("DJC aliased:%s", aliased)
 		return Connect(aliased)
 	}
 
@@ -51,6 +53,8 @@ func Connect(connectStr string) (success bool) {
 		log.Println(err)
 		return false
 	}
+	log.Printf("DJC Connect() connectStr:%s", connectStr)
+	log.Printf("DJC Connect() url:%s", url)
 
 	// Init TNCs
 	switch url.Scheme {
@@ -114,15 +118,21 @@ func Connect(connectStr string) (success bool) {
 	}
 
 	// QSY
-	var revertFreq func()
-	if freq := url.Params.Get("freq"); freq != "" {
-		revertFreq, err = qsy(url.Scheme, freq)
+	var revertVFOState func()
+
+	freq := url.Params.Get("freq")
+	rigmode := strings.ToUpper(url.Params.Get("rig_mode"))
+	log.Printf("DJC connect freq:%s, rigmode:%s", freq, rigmode)
+
+	if freq != "" {
+		revertVFOState, err = qsy(url.Scheme, freq, rigmode)
 		if err != nil {
 			log.Printf("Unable to QSY: %s", err)
 			return
 		}
-		defer revertFreq()
+		defer revertVFOState()
 	}
+
 	var currFreq Frequency
 	if vfo, _, ok, _ := VFOForTransport(url.Scheme); ok {
 		f, _ := vfo.GetFreq()
@@ -171,7 +181,8 @@ func Connect(connectStr string) (success bool) {
 	return
 }
 
-func qsy(method, addr string) (revert func(), err error) {
+func qsy(method, addr string, rigmode string) (revert func(), err error) {
+	log.Printf("DJC qsy method:%v addr:%v rigmode:%v", method, addr, rigmode)
 	noop := func() {}
 	rig, rigName, ok, err := VFOForTransport(method)
 	if err != nil {
@@ -180,17 +191,45 @@ func qsy(method, addr string) (revert func(), err error) {
 		return noop, fmt.Errorf("Hamlib rig '%s' not loaded.", rigName)
 	}
 
-	log.Printf("QSY %s: %s", method, addr)
+	log.Printf("QSY %s: %s %s", method, addr, rigmode)
 	_, oldFreq, err := setFreq(rig, addr)
 	if err != nil {
 		return noop, err
 	}
 
+	var oldrigmode string
+	var oldbw int
+
+	if rigmode != "" { // If rigmode is to be set then we need to preserve and restore the old rigmode and bandwidth
+		log.Printf("DJC qsy - about to setRigMode %s %s", rigmode, "0")
+		oldrigmode, oldbw, err = setRigMode(rig, rigmode, 0) // For now, always take the default bandwidth for the given mode.
+		if err != nil {
+			log.Printf("DJC qsy - setRigMode() failed:%v", err)
+			return noop, err
+		}
+	} else { // rigmode was not specified, no need to preserve old rigmode - just keep whatever
+		log.Printf("DJC qsy - no rigmode set, none preserved.")
+	}
+	log.Printf("DJC qsy oldrigmode:%s oldbw:%d rigmode:%s", oldrigmode, oldbw, rigmode)
+
 	time.Sleep(3 * time.Second)
+
 	return func() {
 		time.Sleep(time.Second)
-		log.Printf("QSX %s: %.3f", method, float64(oldFreq)/1e3)
+		log.Printf("QSX %s: %.3f %s %d", method, float64(oldFreq)/1e3, oldrigmode, oldbw)
 		rig.SetFreq(oldFreq)
+		if oldrigmode != "" {
+			// Didn't change rigmode, don't restre it.
+			rm, err := hamlib.StringToMode(oldrigmode)
+			if err != nil {
+				log.Printf("Error restoring rig mode: %s", err)
+			}
+
+			err = rig.SetMode(rm, oldbw)
+			if err != nil {
+				log.Printf("Error restoring rig mode: %s", err)
+			}
+		}
 	}, nil
 }
 

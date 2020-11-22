@@ -397,6 +397,7 @@ func qsyHandler(w http.ResponseWriter, req *http.Request) {
 	type QSYPayload struct {
 		Transport string      `json:"transport"`
 		Freq      json.Number `json:"freq"`
+		RigMode   string      `json:"rig_mode"`
 	}
 	var payload QSYPayload
 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
@@ -404,25 +405,53 @@ func qsyHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	log.Printf("DJC qsyHandler payload Transport:%s Freq:%s RigMode:%s", payload.Transport, payload.Freq, payload.RigMode)
+
 	rig, rigName, ok, err := VFOForTransport(payload.Transport)
 	switch {
 	case rigName == "":
-		// Either unsupported mode or no rig configured for this transport
+		w.Header().Set("Problem-Type", "NORIG")
+		w.Header().Set("Problem-Text", "Rigcontrol is not configured for the selected transport. Set radio frequency manually.")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	case !ok:
-		// A rig is configured, but not loaded properly
+		w.Header().Set("Problem-Type", "RIGNOTLOADED")
+		w.Header().Set("Problem-Text", "A rig is configured, but not loaded properly")
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("QSY failed: Hamlib rig '%s' not loaded.", rigName)
 	case err != nil:
+		w.Header().Set("Problem-Type", "TRANSPORTSELECTFAILED")
+		w.Header().Set("Problem-Text", "Transport selection failed")
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("QSY failed: %v", err)
+		log.Printf("QSY transport selection failed: %v", err)
 	default:
+		log.Printf("DJC qsyHandler payload.Freq:%v", payload.Freq)
+		log.Printf("DJC qsyHandler payload Transport:%s Freq:%s RigMode: %s", payload.Transport, payload.Freq, payload.RigMode)
 		if _, _, err := setFreq(rig, string(payload.Freq)); err != nil {
+			w.Header().Set("Problem-Type", "BADFREQ")
+			w.Header().Set("Problem-Text", "Frequency given is not valid")
 			w.WriteHeader(http.StatusInternalServerError)
-			log.Printf("QSY failed: %v", err)
+			log.Printf("QSY frequency change failed: %v", err)
 			return
 		}
+
+		rm := payload.RigMode
+		if rm == "" {
+			// If no rig_mode given then don't do anything, just leave the rig_mode in the VFO at whatever
+			// it already is. This is a dangerous strategy but simple to implement and it is what the
+			// code did before anyway.
+		} else {
+			// We have a rig_mode, so attempt to set it, returning errors through the ajax if it fails.
+			_, _, err := setRigMode(rig, rm, 0) //TODO: maybe eventually handle passband but for now just default it.
+			if err != nil {
+				w.Header().Set("Problem-Type", "BADRIGMODE")
+				w.Header().Set("Problem-Text", "Rig mode given is not valid")
+				w.WriteHeader(http.StatusInternalServerError)
+				log.Printf(" QSY could not set given rig mode: %v", err)
+				return
+			}
+		}
+
 		json.NewEncoder(w).Encode(payload)
 	}
 }
@@ -471,7 +500,7 @@ func DisconnectHandler(w http.ResponseWriter, req *http.Request) {
 
 func ConnectHandler(w http.ResponseWriter, req *http.Request) {
 	connectStr := req.FormValue("url")
-
+	log.Printf("DJC ConnectHandler connectStr:%s", connectStr)
 	nMsgs := mbox.InboxCount()
 
 	if success := Connect(connectStr); !success {

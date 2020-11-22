@@ -233,6 +233,18 @@ function initConnectModal() {
 		onConnectInputChange();
 		onConnectFreqChange();
 	});
+
+	$('#rigModeInput').on('focusin focusout', (e) => {
+		// Same behaviour as #freqInput for the same reason.
+		window.setTimeout(() => {
+			$('#connect_btn').prop('disabled', e.type == 'focusin');
+		}, 300);
+	});
+	$('#rigModeInput').change( ()=>{
+		onConnectInputChange();
+		onConnectFreqChange();
+	});
+	
 	$('#radioOnlyInput').change(onConnectInputChange);
 	$('#addrInput').change(onConnectInputChange);
 	$('#targetInput').change(onConnectInputChange);
@@ -293,7 +305,7 @@ function updateRmslist(forceDownload) {
 				tr.click((e) => {
 					tbody.find('.active').removeClass('active');
 					tr.addClass('active');
-					setConnectValues(rms.url);
+					setConnectValues(rms.url+"&rig_mode=USB"); // Always USB for Winlink.org-listed stations.
 				});
 				tbody.append(tr);
 			});
@@ -314,6 +326,7 @@ function updateConnectAliases() {
 			$('#aliasSelect option:selected').each(function() {
 				var alias = $(this).text();
 				var url = connectAliases[$(this).text()];
+				console.log("DJC updateConnectAliases aliasSelect url:"+url)
 				setConnectValues(url);
 				select.val('');
 				select.selectpicker('refresh');
@@ -335,9 +348,18 @@ function setConnectValues(url) {
 	var query = url.search(true);
 
 	if(url.hasQuery("freq")) {
-		$('#freqInput').val(query["freq"])
+		$('#freqInput').val(query["freq"]);
 	} else {
 		$('#freqInput').val('');
+	}
+
+	if(url.hasQuery("rig_mode")) {
+		$('#rigModeInput').val(query["rig_mode"]);
+		console.log("DJC setConnectValues url has rig_mode:"+query["rig_mode"]);
+	}
+	else {
+		console.log("DJC setConnectValues url has no rig_mode. Freq:"+$('#freqInput').val());
+		$('#rigModeInput').val('');
 	}
 
 	if(url.hasQuery("radio_only")) {
@@ -371,6 +393,11 @@ function getConnectURL() {
 	if($('#freqInput').val() && $('#freqInput').parent().hasClass('has-success')) {
 		params += "&freq=" + $('#freqInput').val();
 	}
+
+	if( $('#rigModeInput').val().length != 0 ) {
+		params += "&rig_mode=" + $('#rigModeInput').val();
+	}
+
 	if($('#radioOnlyInput').is(':checked')) {
 		params += "&radio_only=true";
 	}
@@ -378,15 +405,19 @@ function getConnectURL() {
 	if(params) {
 		url += params.replace("&", "?");
 	}
-
+alert("DJC getConnectURL() url:" + url);
 	return url;
 }
 
 function onConnectFreqChange() {
 	$('#qsyWarning').empty().attr('hidden', true);
-
+console.log("DJC onConnectFreqChange() ...")
 	const freqInput = $('#freqInput');
 	freqInput.css('text-decoration', 'none currentcolor solid');
+
+	const rigModeInput = $('#rigModeInput')
+	rigModeInput.css('text-decoration', 'none currentcolor solid');
+	rigModeInput.val( rigModeInput.val().toUpperCase() );
 
 	const inputGroup = freqInput.parent();
 	['has-error', 'has-success', 'has-warning'].forEach((v) => {
@@ -394,9 +425,11 @@ function onConnectFreqChange() {
 	});
 	inputGroup.tooltip('destroy');
 
+	console.log("DJC onConnectFreqChange() rigModeInput val:"+rigModeInput.val())
 	const data = {
 		transport: $('#transportSelect').val(),
 		freq:      new Number(freqInput.val()),
+		rig_mode:  rigModeInput.val(),
 	};
 	if(data.freq == 0) {
 		return;
@@ -410,20 +443,45 @@ function onConnectFreqChange() {
 		contentType: "application/json",
 		success: () => {
 			inputGroup.addClass('has-success');
+			// $('#connect_btn').prop('disabled',false);
 		},
 		error: (xhr) => {
-			freqInput.css('text-decoration', 'line-through');
-			if(xhr.status == 503) {
-				// The feature is unavailable
-				inputGroup.attr('data-toggle', 'tooltip').attr('title', 'Rigcontrol is not configured for the selected transport. Set radio frequency manually.').tooltip('fixTitle');
-			} else {
-				// An unexpected error occured
-				[inputGroup, $('#qsyWarning')].forEach((e) => {
-					e.attr('data-toggle', 'tooltip').attr('title', 'Could not set radio frequency. See log output for more details and/or set the frequency manually.').tooltip('fixTitle');
-				});
-				inputGroup.addClass('has-error');
-				$('#qsyWarning').html('<span class="glyphicon glyphicon-warning-sign" /> QSY failure').attr('hidden', false);
+			var problem = xhr.getResponseHeader("Problem-Type");
+			var txt = xhr.getResponseHeader("Problem-Text");
+			inputGroup.attr('data-toggle', 'tooltip').attr('title', txt).tooltip('fixTitle');
+
+			// Something is wrong - don't let them hit the Connect button.
+			// $('#connect_btn').prop('disabled',true);
+
+			switch(problem) {
+				case "NORIG":
+				case "RIGNOTLOADED":
+				case "TRANSPORTSELECTFAILED":
+					break;
+
+				case "BADFREQ":
+					freqInput.css('text-decoration', 'line-through');
+					// inputGroup.attr('data-toggle', 'tooltip').attr('title', 'Given frequency is invalid.').tooltip('fixTitle');
+					break;
+				case "BADRIGMODE":
+					rigModeInput.css('text-decoration', 'line-through');
+					// inputGroup.attr('data-toggle', 'tooltip').attr('title', 'Given rig_mode is invalid.').tooltip('fixTitle');
+					break;
+				default:
 			}
+
+			// 	if(xhr.status == 503) {
+			// 	// The feature is unavailable
+			// 	inputGroup.attr('data-toggle', 'tooltip').attr('title', 'Rigcontrol is not configured for the selected transport. Set radio frequency manually.').tooltip('fixTitle');
+			// } else {
+			// 	// An unexpected error occured
+			// 	[inputGroup, $('#qsyWarning')].forEach((e) => {
+			// 		e.attr('data-toggle', 'tooltip').attr('title', 'Could not set radio frequency. See log output for more details and/or set the frequency manually.').tooltip('fixTitle');
+			// 	});
+
+			inputGroup.addClass('has-error');
+			$('#qsyWarning').html('<span class="glyphicon glyphicon-warning-sign" /> QSY failure').attr('hidden', false);
+			
 		},
 		complete: () => { onConnectInputChange(); }, // This removes freq= from URL in case of failure
 	});
@@ -608,11 +666,11 @@ function closeComposer(clear)
 
 function connect(evt)
 {
-	url = getConnectURL()
-
+	urlstr = getConnectURL()
+console.log("DJC connect() urlstr:" + ("/api/connect?url=" + encodeURIComponent(urlstr)));
 	$('#connectModal').modal('hide');
 
-	$.getJSON("/api/connect?url=" + url, function(data){
+	$.getJSON("/api/connect?url=" + encodeURIComponent(urlstr), function(data){
 		if( data.NumReceived == 0 ){
 			window.setTimeout(function() { alert("No new messages."); }, 1000);
 		}

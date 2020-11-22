@@ -24,3 +24,5 @@ require (
 	golang.org/x/net v0.0.0-20201031054903-ff519b6c9102 // indirect
 	golang.org/x/sys v0.0.0-20201107080550-4d91cf3a1aaf // indirect
 )
+
+replace github.com/la5nta/wl2k-go => ../wl2k-go

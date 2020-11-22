@@ -153,3 +153,26 @@ func setFreq(rig hamlib.VFO, freq string) (newFreq, oldFreq int, err error) {
 	err = rig.SetFreq(newFreq)
 	return
 }
+
+func setRigMode(rig hamlib.VFO, rigmode string, bandwidth int) (oldrigmode string, oldbandwidth int, err error) {
+	// Command hamlib to set VFO 'rig' to a new modulation mode, returning the old mode.
+	// rigmode is the mode name defined by hamlib, bandwidth is the bandwidth in Hz
+	// A bandwidth of zero is taken (by hamlib) to mean whatever the default bw is for the given mode.
+	// The returning values have the same meaning as the incoming ones.
+	log.Printf("DJC setRigMode rigmode:%s bandwidth:%d", rigmode, bandwidth)
+	omode, oldbandwidth, err := rig.GetMode()
+	if err != nil {
+		return "", 0, fmt.Errorf("Unable to get rig mode: %s", err)
+	}
+
+	oldrigmode = hamlib.ModeToString(omode) // Ignoring implausible error.
+	log.Printf("DJC setRigMode oldRigMode:%s oldbandwidth:%d", oldrigmode, oldbandwidth)
+
+	rm, err := hamlib.StringToMode(rigmode)
+	if err != nil {
+		return "", 0, err
+	}
+
+	err = rig.SetMode(rm, bandwidth)
+	return
+}
